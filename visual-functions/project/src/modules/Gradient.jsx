@@ -67,7 +67,7 @@ function GradientModule() {
       for (let j = 0; j < N - 1; j++) {
         const z = (zs[i*N+j] + zs[(i+1)*N+j] + zs[i*N+j+1] + zs[(i+1)*N+j+1]) / 4;
         const t = (z - zmin) / (zmax - zmin);
-        ctx.fillStyle = `oklch(${0.3 + 0.45*t} 0.1 ${210 - 190*t})`;
+        ctx.fillStyle = HEATMAP_LUT[Math.min(255, Math.max(0, Math.round(t * 255)))];
         ctx.globalAlpha = 0.22;
         ctx.fillRect(x0 + i*tile, y0 + (N-2-j)*tile, tile + 0.5, tile + 0.5);
       }
@@ -90,7 +90,7 @@ function GradientModule() {
       ctx.fillText(yv.toFixed(1), x0 - 22, py + 3);
     }
 
-    // contours
+    // contours — one path per level to minimise draw calls
     if (showContours) {
       const nContours = 14;
       for (let c = 0; c < nContours; c++) {
@@ -99,6 +99,7 @@ function GradientModule() {
         ctx.strokeStyle = contourColor(t);
         ctx.lineWidth = 0.7;
         ctx.globalAlpha = 0.6;
+        ctx.beginPath();
         for (let i = 0; i < N - 1; i++) {
           for (let j = 0; j < N - 1; j++) {
             const z00 = zs[i*N + j], z10 = zs[(i+1)*N + j];
@@ -110,6 +111,7 @@ function GradientModule() {
             drawCellContourG(ctx, k, z00, z10, z01, z11, p00, p10, p01, p11);
           }
         }
+        ctx.stroke();
       }
       ctx.globalAlpha = 1;
     }
@@ -283,7 +285,7 @@ function drawCellContourG(ctx, k, z00, z10, z01, z11, p00, p10, p01, p11) {
   const eRig = () => lerp(p10, p11, z10, z11);
   const eTop = () => lerp(p01, p11, z01, z11);
   const eLef = () => lerp(p00, p01, z00, z01);
-  const seg = (a, b) => { ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke(); };
+  const seg = (a, b) => { ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); };
   switch (idx) {
     case 1: case 14: seg(eBot(), eLef()); break;
     case 2: case 13: seg(eBot(), eRig()); break;

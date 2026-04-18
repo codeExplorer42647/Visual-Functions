@@ -205,6 +205,17 @@ function KV({ rows }) {
   );
 }
 
+// Pre-computed LUT for the blue→yellow heatmap: oklch(0.3+0.45t, 0.1, 210-190t)
+// Used by Gradient, Extrema, Lagrange tile loops — avoids per-tile template literal GC.
+const HEATMAP_LUT = (() => {
+  const lut = new Array(256);
+  for (let i = 0; i < 256; i++) {
+    const t = i / 255;
+    lut[i] = `oklch(${(0.3 + 0.45 * t).toFixed(4)} 0.1 ${(210 - 190 * t).toFixed(2)})`;
+  }
+  return lut;
+})();
+
 // HSL-esque warm palette step for contours
 function contourColor(t) {
   // t in [0,1]
@@ -264,5 +275,5 @@ function arrow(ctx, x1, y1, x2, y2, size = 5) {
 Object.assign(window, {
   useCanvas, useAnimatedCanvas, makeProjector,
   ExprInput, Slider, ToggleGroup, Chips, SectionLabel, Intuition, DefBox, KV,
-  contourColor, drawAxes2D, arrow,
+  contourColor, HEATMAP_LUT, drawAxes2D, arrow,
 });
