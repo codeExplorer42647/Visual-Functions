@@ -182,26 +182,52 @@ function safeCompile(expr) {
   }
 }
 
+// Reusable mutable objects — avoids heap allocation in hot paths.
+// evalAST only reads vars, never stores references, so in-place mutation + restore is safe.
+// grad2 uses two buffers (_g2a / _g2b) to handle Lagrange's nested grad2(v => grad2(...)) calls.
+const _g2a = { x: 0, y: 0 };
+const _g2b = { x: 0, y: 0 };
+let _g2depth = 0;
+const _hv = { x: 0, y: 0 };
+
 // Numeric partial derivative via central difference
+// NOTE: vars is temporarily mutated and restored; do not share vars across concurrent calls.
 function partial(f, vars, key, h = 1e-4) {
-  const v1 = { ...vars, [key]: vars[key] + h };
-  const v2 = { ...vars, [key]: vars[key] - h };
-  return (f(v1) - f(v2)) / (2 * h);
+  const orig = vars[key];
+  vars[key] = orig + h; const fp = f(vars);
+  vars[key] = orig - h; const fm = f(vars);
+  vars[key] = orig;
+  return (fp - fm) / (2 * h);
 }
 
 // Gradient for f(x, y)
 function grad2(f, x, y, h = 1e-4) {
-  return [
-    (f({ x: x + h, y }) - f({ x: x - h, y })) / (2 * h),
-    (f({ x, y: y + h }) - f({ x, y: y - h })) / (2 * h),
-  ];
+  const v = _g2depth === 0 ? _g2a : _g2b;
+  _g2depth++;
+  v.x = x + h; v.y = y;     const fx_p = f(v);
+  v.x = x - h;              const fx_m = f(v);
+  v.x = x;     v.y = y + h; const fy_p = f(v);
+               v.y = y - h; const fy_m = f(v);
+  v.x = x;     v.y = y;
+  _g2depth--;
+  return [(fx_p - fx_m) / (2 * h), (fy_p - fy_m) / (2 * h)];
 }
 
 // Hessian for f(x, y)
 function hess2(f, x, y, h = 1e-3) {
-  const fxx = (f({x: x+h, y}) - 2*f({x, y}) + f({x: x-h, y})) / (h*h);
-  const fyy = (f({x, y: y+h}) - 2*f({x, y}) + f({x, y: y-h})) / (h*h);
-  const fxy = (f({x: x+h, y: y+h}) - f({x: x+h, y: y-h}) - f({x: x-h, y: y+h}) + f({x: x-h, y: y-h})) / (4*h*h);
+  _hv.x = x;     _hv.y = y;     const f00 = f(_hv);
+  _hv.x = x + h;                const fph = f(_hv);
+  _hv.x = x - h;                const fmh = f(_hv);
+  _hv.x = x;     _hv.y = y + h; const f0p = f(_hv);
+                 _hv.y = y - h; const f0m = f(_hv);
+  const fxx = (fph - 2*f00 + fmh) / (h*h);
+  const fyy = (f0p - 2*f00 + f0m) / (h*h);
+  _hv.x = x + h; _hv.y = y + h; const fpp = f(_hv);
+  _hv.x = x + h; _hv.y = y - h; const fpm = f(_hv);
+  _hv.x = x - h; _hv.y = y + h; const fmp = f(_hv);
+  _hv.x = x - h; _hv.y = y - h; const fmm = f(_hv);
+  _hv.x = x;     _hv.y = y;
+  const fxy = (fpp - fpm - fmp + fmm) / (4*h*h);
   return [[fxx, fxy], [fxy, fyy]];
 }
 

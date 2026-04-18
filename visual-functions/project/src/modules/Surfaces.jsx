@@ -157,11 +157,18 @@ function SurfacesModule() {
 
 // --- drawing helpers specific to this module ---
 
+// Pre-computed LUT: teal→yellow palette, oklch(0.36+0.42t, 0.12, 210-190t)
+const COLOR_FOR_Z_LUT = (() => {
+  const lut = new Array(256);
+  for (let i = 0; i < 256; i++) {
+    const t = i / 255;
+    lut[i] = `oklch(${(0.36 + 0.42 * t).toFixed(4)} 0.12 ${(210 - 190 * t).toFixed(2)})`;
+  }
+  return lut;
+})();
+
 function colorForZ(t) {
-  // t in [0,1] : cool -> warm
-  const hue = 210 - 190 * t; // teal -> yellow
-  const L = 0.36 + 0.42 * t;
-  return `oklch(${L} 0.12 ${hue})`;
+  return COLOR_FOR_Z_LUT[Math.min(255, Math.max(0, Math.round(t * 255)))];
 }
 
 function drawContourMap(ctx, zs, N, { cx, cy, size, zmin, zmax, nContours, range }) {
@@ -198,13 +205,14 @@ function drawContourMap(ctx, zs, N, { cx, cy, size, zmin, zmax, nContours, range
     ctx.fillText(yv.toFixed(1), x0 - 22, py + 3);
   }
 
-  // marching squares contours
+  // marching squares contours — one path per level to minimise draw calls
   for (let c = 0; c < nContours; c++) {
     const t = (c + 0.5) / nContours;
     const k = zmin + t * (zmax - zmin);
     ctx.strokeStyle = contourColor(t);
     ctx.lineWidth = t === 0.5 ? 1.3 : 0.8;
     ctx.globalAlpha = 0.9;
+    ctx.beginPath();
     for (let i = 0; i < N - 1; i++) {
       for (let j = 0; j < N - 1; j++) {
         const z00 = zs[i*N + j],     z10 = zs[(i+1)*N + j];
@@ -216,6 +224,7 @@ function drawContourMap(ctx, zs, N, { cx, cy, size, zmin, zmax, nContours, range
         drawCellContour(ctx, k, z00, z10, z01, z11, p00, p10, p01, p11);
       }
     }
+    ctx.stroke();
   }
   ctx.globalAlpha = 1;
 }
@@ -231,7 +240,7 @@ function drawCellContour(ctx, k, z00, z10, z01, z11, p00, p10, p01, p11) {
   const eRig = () => lerp(p10, p11, z10, z11);
   const eTop = () => lerp(p01, p11, z01, z11);
   const eLef = () => lerp(p00, p01, z00, z01);
-  const seg = (a, b) => { ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke(); };
+  const seg = (a, b) => { ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); };
 
   switch (idx) {
     case 1: case 14: seg(eBot(), eLef()); break;

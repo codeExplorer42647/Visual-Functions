@@ -92,7 +92,7 @@ function LagrangeModule() {
     for (let i = 0; i < N-1; i++) for (let j = 0; j < N-1; j++) {
       const z = (zs[i*N+j]+zs[(i+1)*N+j]+zs[i*N+j+1]+zs[(i+1)*N+j+1])/4;
       const t = (z - zmin)/(zmax - zmin);
-      ctx.fillStyle = `oklch(${0.3 + 0.45*t} 0.1 ${210 - 190*t})`;
+      ctx.fillStyle = HEATMAP_LUT[Math.min(255, Math.max(0, Math.round(t * 255)))];
       ctx.globalAlpha = 0.22;
       ctx.fillRect(x0 + i*tile, y0 + (N-2-j)*tile, tile+0.5, tile+0.5);
     }
@@ -100,7 +100,7 @@ function LagrangeModule() {
     ctx.strokeStyle = '#2a2824';
     ctx.strokeRect(x0, y0, mapSize, mapSize);
 
-    // level sets of f
+    // level sets of f — one path per level to minimise draw calls
     const nC = 16;
     for (let c = 0; c < nC; c++) {
       const t = (c+0.5)/nC;
@@ -108,7 +108,9 @@ function LagrangeModule() {
       ctx.strokeStyle = contourColor(t);
       ctx.lineWidth = 0.6;
       ctx.globalAlpha = 0.55;
+      ctx.beginPath();
       drawContourLevel(ctx, zs, N, k, x0, y0, mapSize, tile);
+      ctx.stroke();
     }
     ctx.globalAlpha = 1;
 
@@ -122,7 +124,9 @@ function LagrangeModule() {
       }
       ctx.strokeStyle = 'oklch(0.74 0.12 200)';
       ctx.lineWidth = 2;
+      ctx.beginPath();
       drawContourLevel(ctx, gs, N, 0, x0, y0, mapSize, tile);
+      ctx.stroke();
 
       // level of f passing through solution (highlight tangency)
       if (solutions.length > 0) {
@@ -130,7 +134,9 @@ function LagrangeModule() {
         ctx.strokeStyle = 'oklch(0.78 0.14 80)';
         ctx.lineWidth = 1.8;
         ctx.setLineDash([4, 4]);
+        ctx.beginPath();
         drawContourLevel(ctx, zs, N, sel.fv, x0, y0, mapSize, tile);
+        ctx.stroke();
         ctx.setLineDash([]);
       }
     }
@@ -264,7 +270,7 @@ function drawContourLevel(ctx, zs, N, k, x0, y0, mapSize, tile) {
     if (idx === 0 || idx === 15) continue;
     const lerp=(pa,pb,za,zb)=>{const t=(k-za)/(zb-za);return{x:pa.x+t*(pb.x-pa.x),y:pa.y+t*(pb.y-pa.y)};};
     const eB=()=>lerp(p00,p10,z00,z10),eR=()=>lerp(p10,p11,z10,z11),eT=()=>lerp(p01,p11,z01,z11),eL=()=>lerp(p00,p01,z00,z01);
-    const sg=(a,b)=>{ctx.beginPath();ctx.moveTo(a.x,a.y);ctx.lineTo(b.x,b.y);ctx.stroke();};
+    const sg=(a,b)=>{ctx.moveTo(a.x,a.y);ctx.lineTo(b.x,b.y);};
     switch(idx){case 1:case 14:sg(eB(),eL());break;case 2:case 13:sg(eB(),eR());break;case 3:case 12:sg(eL(),eR());break;case 4:case 11:sg(eT(),eR());break;case 5:sg(eB(),eL());sg(eT(),eR());break;case 6:case 9:sg(eB(),eT());break;case 7:case 8:sg(eT(),eL());break;case 10:sg(eB(),eR());sg(eT(),eL());break;}
   }
 }

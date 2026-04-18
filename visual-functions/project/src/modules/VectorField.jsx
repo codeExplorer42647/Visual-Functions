@@ -13,6 +13,26 @@ function VectorFieldModule() {
   useEffect(() => { const r = safeCompile(exprP); if (r.ok) setCP(r); }, [exprP]);
   useEffect(() => { const r = safeCompile(exprQ); if (r.ok) setCQ(r); }, [exprQ]);
 
+  // divergence heatmap cache — recompute only when P, Q, or range changes
+  const divCacheRef = useRef(null);
+  useEffect(() => {
+    if (!cP.ok || !cQ.ok) { divCacheRef.current = null; return; }
+    const Pfn = cP.fn, Qfn = cQ.fn;
+    const N = 32;
+    const ds = new Float32Array(N * N);
+    let dmax = 0;
+    for (let i = 0; i < N; i++) {
+      for (let j = 0; j < N; j++) {
+        const x = -range + (2*range)*((i + 0.5) / N);
+        const y = -range + (2*range)*((j + 0.5) / N);
+        const d = partial(Pfn, { x, y }, 'x') + partial(Qfn, { x, y }, 'y');
+        ds[i*N + j] = d;
+        if (Math.abs(d) > dmax) dmax = Math.abs(d);
+      }
+    }
+    divCacheRef.current = { ds, dmax: dmax < 1e-6 ? 1 : dmax, N };
+  }, [cP, cQ, range]);
+
   // particles
   const particlesRef = useRef(null);
   if (!particlesRef.current) {
@@ -43,26 +63,14 @@ function VectorFieldModule() {
       py: y0 + mapSize - ((y + range) / (2*range)) * mapSize,
     });
 
-    // background: divergence heatmap
-    if (showDiv && cP.ok && cQ.ok) {
-      const N = 32;
+    // background: divergence heatmap (drawn from cache, updated by useEffect)
+    if (showDiv && divCacheRef.current) {
+      const { ds, dmax, N } = divCacheRef.current;
       const tile = mapSize / N;
-      let dmax = 0;
-      const ds = new Float32Array(N * N);
-      for (let i = 0; i < N; i++) {
-        for (let j = 0; j < N; j++) {
-          const x = -range + (2*range)*((i + 0.5) / N);
-          const y = -range + (2*range)*((j + 0.5) / N);
-          const d = partial(P, { x, y }, 'x') + partial(Q, { x, y }, 'y');
-          ds[i*N + j] = d;
-          if (Math.abs(d) > dmax) dmax = Math.abs(d);
-        }
-      }
-      if (dmax < 1e-6) dmax = 1;
       for (let i = 0; i < N; i++) {
         for (let j = 0; j < N; j++) {
           const d = ds[i*N + j] / dmax;
-          const hue = d > 0 ? 30 : 200; // coral if positive, teal if negative
+          const hue = d > 0 ? 30 : 200;
           const L = 0.35 + 0.25 * Math.abs(d);
           ctx.fillStyle = `oklch(${L} 0.12 ${hue})`;
           ctx.globalAlpha = 0.16 * Math.min(1, Math.abs(d) + 0.1);
